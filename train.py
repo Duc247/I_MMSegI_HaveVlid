@@ -1,16 +1,23 @@
 import argparse
 import logging
 import os
+import sys
 import random
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-from networks.vit_seg_modeling import VisionTransformer as ViT_seg
-from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
-from trainer import trainer_Myops
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+datasets_path = PROJECT_ROOT / "datasets"
+if str(datasets_path) not in sys.path:
+    sys.path.insert(0, str(datasets_path))
+
+from networks.vit_seg_modeling import VisionTransformer as ViT_seg
+from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
+from trainer import trainer_Myops
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str,
@@ -154,25 +161,8 @@ if __name__ == "__main__":
     net = ViT_seg(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
 
     if args.pretrained_path and os.path.exists(args.pretrained_path):
-        fsize = os.path.getsize(args.pretrained_path)
-        if fsize < 1024 * 1024:  # File under 1MB is invalid / empty / corrupted download
-            print(f"⚠️ CẢNH BÁO: File weights {args.pretrained_path} bị rỗng hoặc lỗi download (kích thước chỉ {fsize} bytes)!")
-            print("Đang tự động tải lại từ Google ViT official repository (440MB)...")
-            try:
-                import urllib.request
-                url = "https://storage.googleapis.com/vit_models/imagenet21k/R50+ViT-B_16.npz"
-                os.makedirs(os.path.dirname(args.pretrained_path), exist_ok=True)
-                urllib.request.urlretrieve(url, args.pretrained_path)
-                print(f"✅ Tải lại thành công! Kích thước: {os.path.getsize(args.pretrained_path)/(1024*1024):.1f} MB")
-            except Exception as dl_err:
-                print(f"❌ Không thể tự động tải: {dl_err}")
-
-        try:
-            print(f"Loading pretrained weights from {args.pretrained_path}...")
-            weights = np.load(args.pretrained_path, allow_pickle=False)
-            net.load_from(weights)
-        except Exception as e:
-            print(f"⚠️ Không thể nạp pretrained weights ({e}). Mô hình sẽ tiếp tục train từ khởi tạo ngẫu nhiên.")
+        print(f"Loading pretrained weights from {args.pretrained_path}...")
+        net.load_from(np.load(args.pretrained_path))
     else:
         print("Pretrained path not provided or not found, training from random initialization.")
 

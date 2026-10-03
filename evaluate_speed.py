@@ -35,8 +35,14 @@ from tqdm import tqdm
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+datasets_path = PROJECT_ROOT / "datasets"
+if str(datasets_path) not in sys.path:
+    sys.path.insert(0, str(datasets_path))
 
-from datasets.dataset_Myops import Myops_dataset
+try:
+    from datasets.dataset_Myops import Myops_dataset
+except (ModuleNotFoundError, ImportError):
+    from dataset_Myops import Myops_dataset
 from networks.vit_seg_configs import get_r50_b16_config
 from networks.vit_seg_modeling import VisionTransformer as ViT_seg
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg

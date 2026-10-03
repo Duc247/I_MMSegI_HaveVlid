@@ -4,6 +4,14 @@ import os
 import random
 import sys
 import time
+from pathlib import Path
+
+_cur_dir = os.path.dirname(os.path.abspath(__file__))
+_datasets_dir = os.path.join(_cur_dir, "datasets")
+if _datasets_dir not in sys.path:
+    sys.path.insert(0, _datasets_dir)
+if _cur_dir not in sys.path:
+    sys.path.insert(0, _cur_dir)
 import numpy as np
 import torch
 import torch.nn as nn
@@ -93,7 +101,10 @@ def validate(model, valloader, ce_loss, dice_loss, num_classes=4):
 
 
 def trainer_Myops(args, model, snapshot_path):
-    from datasets.dataset_Myops import Myops_dataset, RandomGenerator, ValGenerator
+    try:
+        from datasets.dataset_Myops import Myops_dataset, RandomGenerator, ValGenerator
+    except (ModuleNotFoundError, ImportError):
+        from dataset_Myops import Myops_dataset, RandomGenerator, ValGenerator
     logging.basicConfig(filename=snapshot_path + "/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
