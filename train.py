@@ -8,14 +8,9 @@ import torch.backends.cudnn as cudnn
 from networks.vit_seg_modeling import VisionTransformer as ViT_seg
 from networks.vit_seg_modeling import CONFIGS as CONFIGS_ViT_seg
 from trainer import trainer_Myops
-import open_clip
-import clip
-from open_clip import get_tokenizer
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str,
@@ -49,6 +44,10 @@ parser.add_argument('--region_fusion_start_epoch', default=100, type=int)
 parser.add_argument('--start_contrast_epoch', type=int, default=20, help='start contrastive loss epoch')
 parser.add_argument('--contrast_sample_num', type=int, default=10, help='contrastive sample_num')
 parser.add_argument('--contrast_w', type=float, default=0.1, help='contrastive loss weight')
+parser.add_argument('--pretrained_path', type=str, default=None, help='path to R50-ViT-B_16.npz pretrained weights')
+parser.add_argument('--val_interval', type=int, default=1, help='evaluate on validation set every N epochs')
+parser.add_argument('--output_dir', type=str, default=None, help='custom output directory for runs and checkpoints')
+parser.add_argument('--backup_dir', type=str, default=None, help='Google Drive backup folder')
 
 args = parser.parse_args()
 
@@ -69,6 +68,8 @@ class_prompts = [
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def Biomedclip_model():
+    import open_clip
+    from open_clip import get_tokenizer
     biomedclip_model = open_clip.create_model_from_pretrained(
         'hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224')
     biomedclip_model = biomedclip_model[0].text
@@ -121,26 +122,42 @@ if __name__ == "__main__":
     args.root_path2 = dataset_config[dataset_name]['root_path2']
     args.list_dir = dataset_config[dataset_name]['list_dir']
     args.is_pretrain = True
-    args.exp = 'TU_' + dataset_name + str(args.img_size)
-    snapshot_path = "{}/weights/{}/{}".format(PROJECT_ROOT, args.exp, 'TU')
-    snapshot_path = snapshot_path + '_pretrain' if args.is_pretrain else snapshot_path
-    snapshot_path += '_' + args.vit_name
-    snapshot_path = snapshot_path + '_skip' + str(args.n_skip)
-    snapshot_path = snapshot_path + '_vitpatch' + str(args.vit_patches_size) if args.vit_patches_size!=16 else snapshot_path
-    snapshot_path = snapshot_path+'_'+str(args.max_iterations)[0:2] + 'k' if args.max_iterations != 30000 else snapshot_path
-    snapshot_path = snapshot_path + '_epo' +str(args.max_epochs) if args.max_epochs != 30 else snapshot_path
-    snapshot_path = snapshot_path+'_bs'+str(args.batch_size)
-    snapshot_path = snapshot_path + '_lr' + str(args.base_lr) if args.base_lr != 0.01 else snapshot_path
-    snapshot_path = snapshot_path + '_'+str(args.img_size)
-    snapshot_path = snapshot_path + '_s'+str(args.seed) if args.seed!=1234 else snapshot_path
+    if args.output_dir:
+        snapshot_path = args.output_dir
+    else:
+        args.exp = 'TU_' + dataset_name + str(args.img_size)
+        snapshot_path = "{}/weights/{}/{}".format(PROJECT_ROOT, args.exp, 'TU')
+        snapshot_path = snapshot_path + '_pretrain' if args.is_pretrain else snapshot_path
+        snapshot_path += '_' + args.vit_name
+        snapshot_path = snapshot_path + '_skip' + str(args.n_skip)
+        snapshot_path = snapshot_path + '_vitpatch' + str(args.vit_patches_size) if args.vit_patches_size!=16 else snapshot_path
+        snapshot_path = snapshot_path+'_'+str(args.max_iterations)[0:2] + 'k' if args.max_iterations != 30000 else snapshot_path
+        snapshot_path = snapshot_path + '_epo' +str(args.max_epochs) if args.max_epochs != 30 else snapshot_path
+        snapshot_path = snapshot_path+'_bs'+str(args.batch_size)
+        snapshot_path = snapshot_path + '_lr' + str(args.base_lr) if args.base_lr != 0.01 else snapshot_path
+        snapshot_path = snapshot_path + '_'+str(args.img_size)
+        snapshot_path = snapshot_path + '_s'+str(args.seed) if args.seed!=1234 else snapshot_path
 
     if not os.path.exists(snapshot_path):
-        os.makedirs(snapshot_path)
+        os.makedirs(snapshot_path, exist_ok=True)
+
+    if torch.cuda.is_available():
+        args.n_gpu = min(args.n_gpu, torch.cuda.device_count())
+    else:
+        args.n_gpu = 0
+
     config_vit = CONFIGS_ViT_seg[args.vit_name]
     config_vit.n_classes = args.num_classes
     config_vit.n_skip = args.n_skip
     if args.vit_name.find('R50') != -1:
         config_vit.patches.grid = (int(args.img_size / args.vit_patches_size), int(args.img_size / args.vit_patches_size))
     net = ViT_seg(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
+
+    if args.pretrained_path and os.path.exists(args.pretrained_path):
+        print(f"Loading pretrained weights from {args.pretrained_path}...")
+        net.load_from(np.load(args.pretrained_path))
+    else:
+        print("Pretrained path not provided or not found, training from random initialization.")
+
     trainer = {'Myops': trainer_Myops,}
     trainer[dataset_name](args, net, snapshot_path)

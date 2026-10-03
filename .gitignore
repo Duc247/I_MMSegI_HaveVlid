@@ -1,0 +1,47 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Datasets and Large Files
+MyoPS380_dataset/
+*.nii
+*.nii.gz
+*.h5
+*.npy.h5
+
+# Heavy weights & checkpoints (use Drive or external storage)
+weights/
+runs/
+predictions/
+test_log/
+model/vit_checkpoint/
+*.pth
+!text_features/*.pth

@@ -103,6 +103,26 @@ class RandomGenerator(object):
         return sample
 
 
+class ValGenerator(object):
+    def __init__(self, output_size):
+        self.output_size = output_size
+
+    def __call__(self, sample):
+        image, image1, image2, label = sample['image'], sample['image1'], sample['image2'], sample['label']
+        x, y = image.shape
+        if x != self.output_size[0] or y != self.output_size[1]:
+            image = zoom(image, (self.output_size[0] / x, self.output_size[1] / y), order=3)
+            image1 = zoom(image1, (self.output_size[0] / x, self.output_size[1] / y), order=3)
+            image2 = zoom(image2, (self.output_size[0] / x, self.output_size[1] / y), order=3)
+            label = zoom(label, (self.output_size[0] / x, self.output_size[1] / y), order=0)
+        image = torch.from_numpy(image.astype(np.float32)).unsqueeze(0)
+        image1 = torch.from_numpy(image1.astype(np.float32)).unsqueeze(0)
+        image2 = torch.from_numpy(image2.astype(np.float32)).unsqueeze(0)
+        label = torch.from_numpy(label.astype(np.float32))
+        sample = {'image': image, 'image1': image1, 'image2': image2, 'label': label.long()}
+        return sample
+
+
 class Myops_dataset(Dataset):
     def __init__(self, base_dir, base_dir1, base_dir2, list_dir, split, transform=None):
         """
@@ -112,7 +132,8 @@ class Myops_dataset(Dataset):
         """
         self.transform = transform  
         self.split = split
-        self.sample_list = open(os.path.join(list_dir, self.split+'.txt')).readlines()
+        split_file = os.path.join(list_dir, self.split + ('' if self.split.endswith('.txt') else '.txt'))
+        self.sample_list = open(split_file).readlines()
         self.data_dir = base_dir
         self.data_dir1 = base_dir1
         self.data_dir2 = base_dir2
@@ -121,11 +142,13 @@ class Myops_dataset(Dataset):
         return len(self.sample_list)
 
     def __getitem__(self, idx):
-        if self.split == "train":
-            slice_name = self.sample_list[idx].strip('\n')
-            data_path = os.path.join(self.data_dir, slice_name+'.npz')
-            data_path_1 = os.path.join(self.data_dir1, slice_name+'.npz')
-            data_path_2 = os.path.join(self.data_dir2, slice_name+'.npz')
+        item_name = self.sample_list[idx].strip('\n').strip()
+        is_slice = self.split in ["train", "val"]
+        if is_slice:
+            clean_name = item_name[:-4] if item_name.endswith('.npz') else item_name
+            data_path = os.path.join(self.data_dir, clean_name + '.npz')
+            data_path_1 = os.path.join(self.data_dir1, clean_name + '.npz')
+            data_path_2 = os.path.join(self.data_dir2, clean_name + '.npz')
             data = np.load(data_path)
             data_1 = np.load(data_path_1)
             data_2 = np.load(data_path_2)
@@ -133,19 +156,17 @@ class Myops_dataset(Dataset):
             image1 = data_1['image']
             image2 = data_2['image']
         else:
-            vol_name = self.sample_list[idx].strip('\n')
-            filepath = self.data_dir + "/{}.npy.h5".format(vol_name)
-            filepath_1 = self.data_dir1 + "/{}.npy.h5".format(vol_name)
-            filepath_2 = self.data_dir2 + "/{}.npy.h5".format(vol_name)
-            data = h5py.File(filepath)
-            data1 = h5py.File(filepath_1)
-            data2 = h5py.File(filepath_2)
-            image, label = data['image'][:], data['label'][:]
-            image1 = data1['image'][:]
-            image2 = data2['image'][:]
+            clean_vol = item_name[:-7] if item_name.endswith('.npy.h5') else item_name
+            filepath = os.path.join(self.data_dir, f"{clean_vol}.npy.h5")
+            filepath_1 = os.path.join(self.data_dir1, f"{clean_vol}.npy.h5")
+            filepath_2 = os.path.join(self.data_dir2, f"{clean_vol}.npy.h5")
+            with h5py.File(filepath, 'r') as data, h5py.File(filepath_1, 'r') as data1, h5py.File(filepath_2, 'r') as data2:
+                image, label = data['image'][:], data['label'][:]
+                image1 = data1['image'][:]
+                image2 = data2['image'][:]
 
-        sample = {'image': image, 'image1':image1, "image2":image2, 'label': label}
+        sample = {'image': image, 'image1': image1, 'image2': image2, 'label': label}
         if self.transform:
             sample = self.transform(sample)
-        sample['case_name'] = self.sample_list[idx].strip('\n')
+        sample['case_name'] = item_name
         return sample

@@ -41,6 +41,7 @@ parser.add_argument('--deterministic', type=int,  default=1, help='whether use d
 parser.add_argument('--base_lr', type=float,  default=0.001, help='segmentation network learning rate')
 parser.add_argument('--seed', type=int, default=1234, help='random seed')
 parser.add_argument('--vit_patches_size', type=int, default=16, help='vit_patches_size, default is 16')
+parser.add_argument('--checkpoint', type=str, default=None, help='explicit checkpoint path (.pth)')
 args = parser.parse_args()
 
 
@@ -118,14 +119,23 @@ if __name__ == "__main__":
         config_vit.patches.grid = (int(args.img_size/args.vit_patches_size), int(args.img_size/args.vit_patches_size))
     net = ViT_seg(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
 
-    snapshot = f"{snapshot_path}/epoch_299.pth"
-    checkpoint = torch.load(snapshot)
+    if args.checkpoint and os.path.exists(args.checkpoint):
+        snapshot = args.checkpoint
+    elif os.path.exists(f"{snapshot_path}/best.pth"):
+        snapshot = f"{snapshot_path}/best.pth"
+    elif os.path.exists(f"{snapshot_path}/latest.pth"):
+        snapshot = f"{snapshot_path}/latest.pth"
+    else:
+        snapshot = f"{snapshot_path}/epoch_299.pth"
+
+    print(f"Loading checkpoint: {snapshot}")
+    checkpoint = torch.load(snapshot, map_location='cuda' if torch.cuda.is_available() else 'cpu')
     new_state_dict = OrderedDict()
     for k, v in checkpoint.items():
-        name = k[7:]
+        name = k[7:] if k.startswith('module.') else k
         new_state_dict[name] = v
     net.load_state_dict(new_state_dict)
-    snapshot_name = snapshot_path.split('/')[-1]
+    snapshot_name = os.path.splitext(os.path.basename(snapshot))[0]
 
     log_folder = './test_log/' + args.exp
     os.makedirs(log_folder, exist_ok=True)
