@@ -122,7 +122,8 @@ def trainer_Myops(args, model, snapshot_path):
     def worker_init_fn(worker_id):
         random.seed(args.seed + worker_id)
 
-    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True,
+    num_workers = getattr(args, 'num_workers', 2)
+    trainloader = DataLoader(db_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True,
                              worker_init_fn=worker_init_fn)
 
     # 2. Dataset Val (61 bệnh nhân / 394 lát cắt chuẩn SCAR)
@@ -132,7 +133,7 @@ def trainer_Myops(args, model, snapshot_path):
     if has_val:
         db_val = Myops_dataset(base_dir=args.root_path, base_dir1=args.root_path1, base_dir2=args.root_path2, list_dir=args.list_dir, split="val",
                                transform=transforms.Compose([ValGenerator(output_size=[args.img_size, args.img_size])]))
-        valloader = DataLoader(db_val, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True)
+        valloader = DataLoader(db_val, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
         print("The length of validation set is: {} slices (61 patients)".format(len(db_val)))
     else:
         print("Warning: val.txt not found in list_dir, running without validation.")
@@ -162,13 +163,13 @@ def trainer_Myops(args, model, snapshot_path):
     best_val_metrics = {}
 
     logging.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
-    iterator = tqdm(range(max_epoch), ncols=70)
-    for epoch_num in iterator:
+    for epoch_num in range(max_epoch):
         t_epoch_start = time.time()
         do_contrast = epoch_num > args.start_contrast_epoch
         epoch_train_loss = 0.0
 
-        for i_batch, sampled_batch in enumerate(trainloader):
+        pbar = tqdm(trainloader, desc=f"Epoch {epoch_num + 1:03d}/{max_epoch}", ncols=95, leave=False)
+        for i_batch, sampled_batch in enumerate(pbar):
             image_batch, image1_batch, image2_batch, label_batch = sampled_batch['image'], sampled_batch['image1'], sampled_batch['image2'], sampled_batch['label']
             image_batch, image1_batch, image2_batch, label_batch = image_batch.cuda(), image1_batch.cuda(), image2_batch.cuda(), label_batch.cuda()
             out_pre, dec_seg, features_embedding_list, text_embedding_list= model(image_batch, image1_batch, image2_batch, do_contrast)
@@ -211,6 +212,7 @@ def trainer_Myops(args, model, snapshot_path):
                 param_group['lr'] = lr_
             iter_num = iter_num + 1
             epoch_train_loss += loss.item()
+            pbar.set_postfix({"loss": f"{loss.item():.4f}", "lr": f"{lr_:.5f}"})
 
             writer.add_scalar('info/lr', lr_, iter_num)
             writer.add_scalar('info/total_loss', loss, iter_num)
@@ -241,13 +243,13 @@ def trainer_Myops(args, model, snapshot_path):
             writer.add_scalar('val/dice_scar', val_metrics["dice_scar"], epoch_num + 1)
             writer.add_scalar('val/dice_edema', val_metrics["dice_edema"], epoch_num + 1)
 
-            logging.info(
-                f"[Epoch {epoch_num + 1:03d}/{max_epoch}] "
+            summary_msg = (
+                f"✅ [Epoch {epoch_num + 1:03d}/{max_epoch}] ({epoch_time:.1f}s) | "
                 f"Train Loss: {epoch_train_loss:.4f} | Val Loss: {val_metrics['val_loss']:.4f} | "
-                f"Val Dice Mean: {val_metrics['dice_mean']:.4f} (Myo: {val_metrics['dice_myo']:.4f}, "
-                f"Scar: {val_metrics['dice_scar']:.4f}, Edema: {val_metrics['dice_edema']:.4f}) | "
-                f"Time: {epoch_time:.1f}s"
+                f"Val Mean Dice: {val_metrics['dice_mean']:.4f} [Myo: {val_metrics['dice_myo']:.4f}, Scar: {val_metrics['dice_scar']:.4f}, Edema: {val_metrics['dice_edema']:.4f}]"
             )
+            print(summary_msg, flush=True)
+            logging.info(summary_msg)
 
             # Check and save best model
             if val_metrics["dice_mean"] > best_score:
@@ -256,7 +258,9 @@ def trainer_Myops(args, model, snapshot_path):
                 best_val_metrics = val_metrics
                 best_path = os.path.join(snapshot_path, 'best.pth')
                 torch.save(model.state_dict(), best_path)
-                logging.info(f"🏆 NEW BEST MODEL at epoch {best_epoch} with Val Mean Dice: {best_score:.4f} -> Saved {best_path}")
+                best_msg = f"🏆 [NEW BEST] Epoch {best_epoch}: Val Mean Dice = {best_score:.4f} -> Saved best.pth"
+                print(best_msg, flush=True)
+                logging.info(best_msg)
 
                 if backup_dir:
                     try:

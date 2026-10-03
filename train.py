@@ -55,6 +55,7 @@ parser.add_argument('--pretrained_path', type=str, default=None, help='path to R
 parser.add_argument('--val_interval', type=int, default=1, help='evaluate on validation set every N epochs')
 parser.add_argument('--output_dir', type=str, default=None, help='custom output directory for runs and checkpoints')
 parser.add_argument('--backup_dir', type=str, default=None, help='Google Drive backup folder')
+parser.add_argument('--num_workers', type=int, default=2, help='dataloader workers (default: 2 for parallel prefetch)')
 
 args = parser.parse_args()
 
