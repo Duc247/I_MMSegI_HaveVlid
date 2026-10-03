@@ -162,8 +162,17 @@ def trainer_Myops(args, model, snapshot_path):
     best_epoch = -1
     best_val_metrics = {}
 
+    start_epoch = 0
+    if getattr(args, 'resume', None) and os.path.exists(args.resume):
+        import re
+        match = re.search(r'epoch_(\d+)\.pth', os.path.basename(args.resume))
+        if match:
+            start_epoch = int(match.group(1))
+            iter_num = start_epoch * len(trainloader)
+            print(f"🔄 Tiếp tục huấn luyện từ Epoch {start_epoch + 1}/{max_epoch} (Checkpoint: {args.resume})...")
+
     logging.info("{} iterations per epoch. {} max iterations ".format(len(trainloader), max_iterations))
-    for epoch_num in range(max_epoch):
+    for epoch_num in range(start_epoch, max_epoch):
         t_epoch_start = time.time()
         do_contrast = epoch_num > args.start_contrast_epoch
         epoch_train_loss = 0.0

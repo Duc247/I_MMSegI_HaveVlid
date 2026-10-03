@@ -56,6 +56,7 @@ parser.add_argument('--val_interval', type=int, default=1, help='evaluate on val
 parser.add_argument('--output_dir', type=str, default=None, help='custom output directory for runs and checkpoints')
 parser.add_argument('--backup_dir', type=str, default=None, help='Google Drive backup folder')
 parser.add_argument('--num_workers', type=int, default=2, help='dataloader workers (default: 2 for parallel prefetch)')
+parser.add_argument('--resume', type=str, default=None, help='path to checkpoint to resume (e.g. runs/I_MMSeg_SCAR_Split/epoch_20.pth)')
 
 args = parser.parse_args()
 
@@ -161,7 +162,10 @@ if __name__ == "__main__":
         config_vit.patches.grid = (int(args.img_size / args.vit_patches_size), int(args.img_size / args.vit_patches_size))
     net = ViT_seg(config_vit, img_size=args.img_size, num_classes=config_vit.n_classes).cuda()
 
-    if args.pretrained_path and os.path.exists(args.pretrained_path):
+    if getattr(args, 'resume', None) and os.path.exists(args.resume):
+        print(f"Resuming model weights from checkpoint: {args.resume}...")
+        net.load_state_dict(torch.load(args.resume, map_location='cuda'))
+    elif args.pretrained_path and os.path.exists(args.pretrained_path):
         print(f"Loading pretrained weights from {args.pretrained_path}...")
         net.load_from(np.load(args.pretrained_path))
     else:
